@@ -20,9 +20,13 @@ class game(object):
 
 class player(object):
 	""" contains information about the player """
-	def __init__(self,name,isHuman):
+	def __init__(self,name,isHuman,points = 0):
 		self.name = name
 		self.isHuman = isHuman
+		self.points = points
+
+	def addPoints(self, points):
+		self.points += points
 
 class deck(object):
 	"""52 cards"""
@@ -87,7 +91,7 @@ class deck(object):
 		s = []
 		for card in self.cards:
 			s.append(card.short_name)
-		return '\n'.join(s)
+		return ', '.join(s)
 
 	def add_card(self,card):
 		self.cards.append(card)
@@ -131,7 +135,7 @@ class card(object):
 class hand(deck):
 	"""a hand of cards of any number"""
 
-	def __init__(self,id=1, isDealer=False, player):
+	def __init__(self,player,isDealer=False):
 		self.cards = []
 		self.id = id
 		self.isDealer = isDealer
@@ -152,6 +156,7 @@ class upcard(deck):
 
 class peg(deck):
 	"""the cards played by the players"""
+
 	def __init__(self):
 		self.cards = []
 
@@ -263,29 +268,97 @@ def score_upcard(player):
 	player.points += 2
 	game.addHistory('%s scores 2 for jack as upcard' % player.name)
 
-def pegging(hand1,hand2,upcard):
-	hands = [hand1,hand2]
-	peg = peg()
+def pegging(peg,hand1,hand2):
+	peghand1 = hand1
+	peghand2 = hand2
+	hands = [peghand1,peghand2]
+	
 	cards_played = 0
 	dealer_priority = False
+	goGiven = False
+
 	while cards_played < 8:
 		# 8 cards are played in total
+
 		for hand in hands:
+			# cycle through players
+
 			if (dealer_priority and hand.isDealer) or (not dealer_priority and not hand.isDealer):
-				if hand.player.isHuman:
-					var = raw_input("Enter card to play: ")
-					for hand_card in hand1.cards:
-						if hand_card.short_name == var:
-							peg.add_card(hand_card)
-				else:
-					pegRandomCard(peg,hand)
-		dealer_priority = not dealer_priority
+				# check turn to play
 
-def pegRandomCard(peg,hand):
-	""" pick a random card for the AI """
+				if len(hand.cards) > 0:
+					# check if player has cards remaining
 
-def pegCard(peg,card):
-	""" logic for pegging play """
+					count = getCount(peg)
+
+					if canPlay(count,hand):
+						# check if player has a viable move
+
+						if hand.player.isHuman:
+							#if player is human
+
+							success = False
+
+							while not success:
+								# loop until player picks a card that is playable
+								# check first if there are cards that are playable
+
+								if canPlay(count,hand):
+									var = raw_input("The count is:%s\r\nCards available (%s)\r\nEnter a valid card to play: " % (count,hand))
+									for card in hand.cards:
+										if card.short_name == var:
+											if card.count_value <= 31-count:
+												peg = pegCard(peg,card,hand.player)
+												success = True
+												cards_played += 1
+												hand.remove_card(card)
+											else:
+												print "That card cannot be played."
+						else:
+							# pick random card for AI player
+							hand.shuffle()
+							for card in hand.cards:
+								if card.count_value <= 31-count:
+									peg = pegCard(peg,card,hand.player)
+									cards_played += 1
+									hand.remove_card(card)
+
+					else:
+						if goGiven:
+							peg = pegCard(peg,card('new','new',None,None,'new'),hand.player)
+							goGiven = False
+						else:
+							peg = pegCard(card('go','go',None,None,'go'),hand.player)
+							goGiven = True
+
+		if not goGiven:
+			dealer_priority = not dealer_priority
+
+
+def pegCard(peg,card,player):
+	""" logic and scoring for pegging play """
+	# test, just add one
+	peg.add_card(card)
+	player.addPoints(1)
+	return peg
+
+
+def getCount(peg):
+	x = 0
+	for card in peg.cards:
+		if card.short_name == 'new':
+			x = 0
+		else:
+			x += card.count_value
+	return x
+
+def canPlay(count,hand):
+	for card in hand.cards:
+		if card.count_value <= 31-count:
+			return True
+	return False
+
+
 	
 
 
@@ -294,12 +367,9 @@ player2 = player('AI',False)
 game = game(player1,player2)
 deck = deck()
 deck.shuffle()
-hand1 = hand(1,True,player1)
-hand2 = hand(2,False,player2)
+hand1 = hand(player1,True)
+hand2 = hand(player2,False)
 crib = crib(1)
-upcard = upcard()
-if upcard.name == 'Jack':
-	score_upcard
 deck.deal_to_hand(hand1,6)
 deck.deal_to_hand(hand2,6)
 print hand1
@@ -309,9 +379,12 @@ for card in cards:
 	for hand_card in hand1.cards:
 		if hand_card.short_name == card:
 			hand1.move_to_crib(crib,hand_card)
-for card in 
-print crib
+upcard = upcard()
 deck.deal_to_hand(upcard,1)
+if upcard.cards[0].name == 'Jack':
+	score_upcard
 print "The upcard is: ", upcard
+peg = peg()
+pegging(peg,hand1,hand2)
 print hand1
 print "hand score is: ", score(hand1,upcard,False)
