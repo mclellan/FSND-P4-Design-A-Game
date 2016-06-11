@@ -1,5 +1,6 @@
 #Cribbage hand simulator
 import random, sys, math, collections, copy
+from google.appengine.ext import ndb
 
 class game(object):
 	""" contains game information """
@@ -610,8 +611,9 @@ def playHand(game, dealBool):
 				print cr, u
 				score(game,cr,u,True)
 
-player1 = player('John',True)
-player2 = player('AI',False)
-game = game(player1,player2)
+
+#player1 = player('John',True)
+#player2 = player('AI',False)
+#game = game(player1,player2)
 # test # game.player1.points = 120
-playGame(game)
+#playGame(game)

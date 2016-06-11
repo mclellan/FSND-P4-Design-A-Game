@@ -7,6 +7,8 @@ from datetime import date
 from protorpc import messages
 from google.appengine.ext import ndb
 
+#from cribbage import game
+
 
 class User(ndb.Model):
     """User profile"""
@@ -16,9 +18,8 @@ class User(ndb.Model):
 
 class Game(ndb.Model):
     """Game object"""
-    target = ndb.IntegerProperty(required=True)
-    attempts_allowed = ndb.IntegerProperty(required=True)
-    attempts_remaining = ndb.IntegerProperty(required=True, default=5)
+    user_points = ndb.IntegerProperty(required=True)
+    ai_points = ndb.IntegerProperty(required=True)
     game_over = ndb.BooleanProperty(required=True, default=False)
     user = ndb.KeyProperty(required=True, kind='User')
 
@@ -26,9 +27,8 @@ class Game(ndb.Model):
     def new_game(cls, user):
         """Creates and returns a new game"""
         game = Game(user=user,
-                    player_points=0,
+                    user_points=0,
                     ai_points=0,
-                    move=(,),
                     game_over=False)
         game.put()
         return game
@@ -38,7 +38,8 @@ class Game(ndb.Model):
         form = GameForm()
         form.urlsafe_key = self.key.urlsafe()
         form.user_name = self.user.get().name
-        form.attempts_remaining = self.attempts_remaining
+        form.user_points = self.user_points
+        form.ai_points = self.ai_points
         form.game_over = self.game_over
         form.message = message
         return form
@@ -50,11 +51,11 @@ class Game(ndb.Model):
         self.put()
         # Add the game to the score 'board'
         score = Score(user=self.user, date=date.today(), won=won,
-                      points=self.player_points)
+                      points=self.user_points)
         score.put()
 
-    def game_history(self)
-        form = GameForm()
+    #def game_history(self)
+    #    form = GameForm()
 
 
 class Score(ndb.Model):
@@ -62,33 +63,31 @@ class Score(ndb.Model):
     user = ndb.KeyProperty(required=True, kind='User')
     date = ndb.DateProperty(required=True)
     won = ndb.BooleanProperty(required=True)
-    guesses = ndb.IntegerProperty(required=True)
+    user_points = ndb.IntegerProperty(required=True)
 
     def to_form(self):
         return ScoreForm(user_name=self.user.get().name, won=self.won,
-                         date=str(self.date), points=self.player_points)
+                         date=str(self.date), points=self.user_points)
 
 
 class GameForm(messages.Message):
     """GameForm for outbound game state information"""
     urlsafe_key = messages.StringField(1, required=True)
-    attempts_remaining = messages.IntegerField(2, required=True)
-    game_over = messages.BooleanField(3, required=True)
-    message = messages.StringField(4, required=True)
-    user_name = messages.StringField(5, required=True)
+    user_points = messages.IntegerField(2, required=True)
+    ai_points = messages.IntegerField(3, required=True)
+    game_over = messages.BooleanField(4, required=True)
+    message = messages.StringField(5, required=True)
+    user_name = messages.StringField(6, required=True)
 
 
 class NewGameForm(messages.Message):
     """Used to create a new game"""
     user_name = messages.StringField(1, required=True)
-    min = messages.IntegerField(2, default=1)
-    max = messages.IntegerField(3, default=10)
-    attempts = messages.IntegerField(4, default=5)
 
 
 class MakeMoveForm(messages.Message):
-    """Used to make a move in an existing game"""
-    guess = messages.IntegerField(1, required=True)
+    """Used to make a play in an existing game"""
+    play = messages.StringField(1, required=True)
 
 
 class ScoreForm(messages.Message):
@@ -96,7 +95,7 @@ class ScoreForm(messages.Message):
     user_name = messages.StringField(1, required=True)
     date = messages.StringField(2, required=True)
     won = messages.BooleanField(3, required=True)
-    guesses = messages.IntegerField(4, required=True)
+    user_points = messages.IntegerField(4, required=True)
 
 
 class ScoreForms(messages.Message):

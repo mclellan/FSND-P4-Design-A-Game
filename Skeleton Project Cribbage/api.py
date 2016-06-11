@@ -27,8 +27,8 @@ USER_REQUEST = endpoints.ResourceContainer(user_name=messages.StringField(1),
 
 MEMCACHE_MOVES_REMAINING = 'MOVES_REMAINING'
 
-@endpoints.api(name='guess_a_number', version='v1')
-class GuessANumberApi(remote.Service):
+@endpoints.api(name='cribbage', version='v1')
+class CribbageApi(remote.Service):
     """Game API"""
     @endpoints.method(request_message=USER_REQUEST,
                       response_message=StringMessage,
@@ -56,18 +56,13 @@ class GuessANumberApi(remote.Service):
         if not user:
             raise endpoints.NotFoundException(
                     'A User with that name does not exist!')
-        try:
-            game = Game.new_game(user.key, request.min,
-                                 request.max, request.attempts)
-        except ValueError:
-            raise endpoints.BadRequestException('Maximum must be greater '
-                                                'than minimum!')
+        game = Game.new_game(user.key)
 
         # Use a task queue to update the average attempts remaining.
         # This operation is not needed to complete the creation of a new game
         # so it is performed out of sequence.
         taskqueue.add(url='/tasks/cache_average_attempts')
-        return game.to_form('Good luck playing Guess a Number!')
+        return game.to_form('Good luck playing Cribbage!')
 
     @endpoints.method(request_message=GET_GAME_REQUEST,
                       response_message=GameForm,
@@ -93,7 +88,8 @@ class GuessANumberApi(remote.Service):
         if game.game_over:
             return game.to_form('Game already over!')
 
-        game.attempts_remaining -= 1
+        # all the game logic 
+        """game.attempts_remaining -= 1
         if request.guess == game.target:
             game.end_game(True)
             return game.to_form('You win!')
@@ -108,7 +104,8 @@ class GuessANumberApi(remote.Service):
             return game.to_form(msg + ' Game over!')
         else:
             game.put()
-            return game.to_form(msg)
+            return game.to_form(msg)"""
+        return game.to_form('msg')
 
     @endpoints.method(response_message=ScoreForms,
                       path='scores',
@@ -142,15 +139,14 @@ class GuessANumberApi(remote.Service):
 
     @staticmethod
     def _cache_average_attempts():
-        """Populates memcache with the average moves remaining of Games"""
+        """Populates memcache with the average score of users active Games"""
         games = Game.query(Game.game_over == False).fetch()
         if games:
             count = len(games)
-            total_attempts_remaining = sum([game.attempts_remaining
-                                        for game in games])
-            average = float(total_attempts_remaining)/count
+            total_points = sum([game.user_points for game in games])
+            average = float(total_points)/count
             memcache.set(MEMCACHE_MOVES_REMAINING,
-                         'The average moves remaining is {:.2f}'.format(average))
+                         'The average user point score is {:.2f}'.format(average))
 
 
-api = endpoints.api_server([GuessANumberApi])
+api = endpoints.api_server([CribbageApi])
