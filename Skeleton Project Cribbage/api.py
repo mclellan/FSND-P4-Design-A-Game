@@ -15,6 +15,7 @@ from models import User, Game, Score
 from models import StringMessage, NewGameForm, GameForm, MakeMoveForm,\
     ScoreForms
 from utils import get_by_urlsafe
+import cribbage
 
 NEW_GAME_REQUEST = endpoints.ResourceContainer(NewGameForm)
 GET_GAME_REQUEST = endpoints.ResourceContainer(
@@ -56,7 +57,7 @@ class CribbageApi(remote.Service):
         if not user:
             raise endpoints.NotFoundException(
                     'A User with that name does not exist!')
-        game = Game.new_game(user.key)
+        game = Game.new_game(user.key,user.name)
 
         # Use a task queue to update the average attempts remaining.
         # This operation is not needed to complete the creation of a new game
@@ -73,7 +74,11 @@ class CribbageApi(remote.Service):
         """Return the current game state."""
         game = get_by_urlsafe(request.urlsafe_game_key, Game)
         if game:
+            #g = cribbage.depickleGame(game.pickle)
+            #return game.to_form(g.message)
+
             return game.to_form('Time to make a move!')
+            
         else:
             raise endpoints.NotFoundException('Game not found!')
 

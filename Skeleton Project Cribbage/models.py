@@ -7,29 +7,42 @@ from datetime import date
 from protorpc import messages
 from google.appengine.ext import ndb
 
+import cribbage
 #from cribbage import game
 
 
 class User(ndb.Model):
     """User profile"""
     name = ndb.StringProperty(required=True)
-    email =ndb.StringProperty()
+    email = ndb.StringProperty()
 
 
 class Game(ndb.Model):
     """Game object"""
     user_points = ndb.IntegerProperty(required=True)
     ai_points = ndb.IntegerProperty(required=True)
-    game_over = ndb.BooleanProperty(required=True, default=False)
+    finished = ndb.BooleanProperty(required=True, default=False)
     user = ndb.KeyProperty(required=True, kind='User')
+    history = ndb.StringProperty(required=True)
+    deal = ndb.BooleanProperty(required=True, default=False)
+    user_hand = ndb.StringProperty(required=True)
+    crib_hand = ndb.StringProperty(required=True)
+    ai_hand = ndb.StringProperty(required=True)
+    pegging = ndb.StringProperty(required=True)
 
     @classmethod
-    def new_game(cls, user):
+    def new_game(cls, user, username):
         """Creates and returns a new game"""
+
         game = Game(user=user,
                     user_points=0,
                     ai_points=0,
-                    game_over=False)
+                    finished=False,
+                    history = '',
+                    user_hand = '',
+                    crib_hand = '',
+                    ai_hand = '',
+                    pegging = '')
         game.put()
         return game
 
@@ -40,19 +53,41 @@ class Game(ndb.Model):
         form.user_name = self.user.get().name
         form.user_points = self.user_points
         form.ai_points = self.ai_points
-        form.game_over = self.game_over
+        form.finished = self.finished
         form.message = message
         return form
 
     def end_game(self, won=False):
         """Ends the game - if won is True, the player won. - if won is False,
         the player lost."""
-        self.game_over = True
+        self.finished = True
         self.put()
         # Add the game to the score 'board'
         score = Score(user=self.user, date=date.today(), won=won,
                       points=self.user_points)
         score.put()
+
+    def setDeal(self,dealBool):
+        self.dealBool = dealBool
+        self.put()
+
+    def addHistory(self,add_event):
+        self.history += [add_event]
+        self.put()
+
+    def getHistory(self):
+        return self.history
+
+    def score(self,user,points):
+        if user == True:
+            if user_points + points >= 121:
+                user_points = 121
+                self.finished = True
+        else:
+            if ai_points + points >= 121:
+                ai_points = 121
+                self.finished = True
+        self.put()
 
     #def game_history(self)
     #    form = GameForm()
@@ -75,7 +110,7 @@ class GameForm(messages.Message):
     urlsafe_key = messages.StringField(1, required=True)
     user_points = messages.IntegerField(2, required=True)
     ai_points = messages.IntegerField(3, required=True)
-    game_over = messages.BooleanField(4, required=True)
+    finished = messages.BooleanField(4, required=True)
     message = messages.StringField(5, required=True)
     user_name = messages.StringField(6, required=True)
 

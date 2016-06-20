@@ -1,10 +1,15 @@
 #Cribbage hand simulator
-import random, sys, math, collections, copy
-from google.appengine.ext import ndb
+import random, sys, math, collections, copy, cPickle as pickle
+from models import Game
+# from google.appengine.ext import ndb
 
-class game(object):
+"""
+class cgame(object):
 	""" contains game information """
-	hands = []
+	dealBool = False
+
+	def setDeal(self,dealBool):
+		self.dealBool = dealBool
 
 	def addHistory(self,add_event):
 		self.history += [add_event]
@@ -12,8 +17,8 @@ class game(object):
 	def __init__(self,player1,player2):
 		self.player1 = player1
 		self.player2 = player2
-		game.finished = False
-		game.winner = None
+		cgame.finished = False
+		cgame.winner = None
 
 	def declareWinner(self,player):
 		self.finished = True
@@ -25,13 +30,14 @@ class game(object):
 	def score(self,player,points):
 		if player == self.player1:
 			if self.player1.addPoints(points):
-				game.winner = self.player1
-				game.finished = True
+				cgame.winner = self.player1
+				cgame.finished = True
 		else:
 			if self.player2.addPoints(points):
-				game.winner = self.player2
-				game.finished = True
+				cgame.winner = self.player2
+				cgame.finished = True
 		#print game.player1.name, game.player1.points, game.player2.name, game.player2.points
+"""
 
 class player(object):
 	""" contains information about the player """
@@ -134,6 +140,14 @@ class deck(object):
 	def move_to_crib(self, crib, card):
 		self.cards.remove(card)
 		crib.add_card(card)
+
+	def from_string(self, s):
+		fullDeck = deck()
+		cards = str.split(s,',')
+		for c in cards:
+			for hand_card in fullDeck.cards:
+				if hand_card.short_name == c:
+					fullDeck.move_to_crib(self,hand_card)
 
 class card(object):
 	"""a card with given suit, value, and name"""
@@ -528,15 +542,24 @@ def testRun(peg,hand):
 				else:
 					print "That card cannot be played."
 
+def newGame(playerName):
+	""" creates a new game from player names 
+	and determines the dealer """
+	player1 = player(playerName,True)
+	player2 = player('AI',False)
+	g = cgame(player1,player2)
+
+	# determine dealer
+	dealer = random.choice([g.player1,g.player2])
+	if dealer == g.player1:
+		g.setDeal(True)
+		g.message = 'The dealer is: %s' % dealer.name
+	return g
+
+
+
 def playGame(game):
 	""" container for a full game"""
-
-	# Determine the dealer randomly for first hand
-	dealBool = False
-	dealer = random.choice([game.player1,game.player2])
-	print 'The dealer is:',dealer.name
-	if dealer == game.player1:
-		dealBool = True
 
 	while not game.finished:
 		# player a hand
@@ -611,9 +634,12 @@ def playHand(game, dealBool):
 				print cr, u
 				score(game,cr,u,True)
 
-
-#player1 = player('John',True)
-#player2 = player('AI',False)
-#game = game(player1,player2)
+#g = newGame('John')
+#p = pickle.dumps(g)
+#print p
+#g2 = pickle.loads(p)
+#print g2
+#print g2.player1, g2.player2, g2.winner
+#playGame(g2)
 # test # game.player1.points = 120
 #playGame(game)
