@@ -1,9 +1,9 @@
 #Cribbage hand simulator
-import random, sys, math, collections, copy, cPickle as pickle
-from models import Game
+import random, sys, math, collections, copy
+from models import User, Game, Score
 # from google.appengine.ext import ndb
 
-"""
+
 class cgame(object):
 	""" contains game information """
 	dealBool = False
@@ -17,11 +17,11 @@ class cgame(object):
 	def __init__(self,player1,player2):
 		self.player1 = player1
 		self.player2 = player2
-		cgame.finished = False
+		cgame.game_over = False
 		cgame.winner = None
 
 	def declareWinner(self,player):
-		self.finished = True
+		self.game_over = True
 		self.winner = player
 
 	def getHistory(self):
@@ -31,13 +31,13 @@ class cgame(object):
 		if player == self.player1:
 			if self.player1.addPoints(points):
 				cgame.winner = self.player1
-				cgame.finished = True
+				cgame.game_over = True
 		else:
 			if self.player2.addPoints(points):
 				cgame.winner = self.player2
-				cgame.finished = True
+				cgame.game_over = True
 		#print game.player1.name, game.player1.points, game.player2.name, game.player2.points
-"""
+
 
 class player(object):
 	""" contains information about the player """
@@ -141,14 +141,6 @@ class deck(object):
 		self.cards.remove(card)
 		crib.add_card(card)
 
-	def from_string(self, s):
-		fullDeck = deck()
-		cards = str.split(s,',')
-		for c in cards:
-			for hand_card in fullDeck.cards:
-				if hand_card.short_name == c:
-					fullDeck.move_to_crib(self,hand_card)
-
 class card(object):
 	"""a card with given suit, value, and name"""
 
@@ -162,11 +154,23 @@ class card(object):
 class hand(deck):
 	"""a hand of cards of any number"""
 
+	"""
 	def __init__(self,player,isDealer=False):
 		self.cards = []
 		self.id = id
 		self.isDealer = isDealer
 		self.player = player
+	"""
+
+	# method to convert a datastore string to a set of cards
+	def __init__(self, s):
+		self.cards = []
+		fullDeck = deck()
+		cards = str.split(s,',')
+		for c in cards:
+			for hand_card in fullDeck.cards:
+				if hand_card.short_name == c:
+					fullDeck.move_to_crib(self,hand_card)
 
 class crib(deck):
 	"""the discarded 2 cards from each player"""
@@ -392,7 +396,7 @@ def pegging(game,p,hand1,hand2):
 		if not goGiven:
 			dealer_priority = not dealer_priority
 
-		if game.finished:
+		if game.game_over:
 			break
 
 
@@ -561,7 +565,7 @@ def newGame(playerName):
 def playGame(game):
 	""" container for a full game"""
 
-	while not game.finished:
+	while not game.game_over:
 		# player a hand
 		playHand(game, dealBool)
 
@@ -624,15 +628,66 @@ def playHand(game, dealBool):
 	pegging(game,p,hand1,hand2)
 
 	#scoring 
-	if not game.finished:
+	if not game.game_over:
 		print hand2, u
 		score(game,hand2,u,False)
-		if not game.finished:
+		if not game.game_over:
 			print hand1, u
 			score(game,hand1,u,False)
-			if not game.finished:
+			if not game.game_over:
 				print cr, u
 				score(game,cr,u,True)
+
+
+
+# determine the state of the game and then resume play in the next
+# game step
+def resumeFromAnywhere(game, request):
+	#user_hand, ai_hand, crib, dealer, pegging, upcard
+	u = hand(str(game.user_hand))
+	a = hand(str(game.ai_hand))
+	c = hand(str(game.crib_hand))
+	p = hand(str(game.pegging))
+	uc = hand(str(game.upcard))
+
+	# determine the dealer's name
+	if game.dealer:
+		deal = 'your'
+	else:
+		deal = "the AI's"
+
+	if len(u.cards) == 0 or u.cards == None:
+	 	# deal new hands
+ 		d = deck()
+		d.shuffle()
+		d.deal_to_hand(u,6)	
+		d.deal_to_hand(a,6)
+		game.addHistory(str(u))
+		game.user_hand = str(u)
+		game.ai_hand = str(a)
+		game.message = str('It is %s deal and crib. Select two cards from your hand to put in the crib. Your hand is: %s' % (deal, str(u)))
+		#game.put()
+		return game
+		#return ('It is %s deal and crib. Select two cards from your hand to put in the crib.\r\nYour hand is: %s' % (deal, str(u)))
+
+
+	if len(c.cards) == 0:
+	 	# user action is to put cards in crib
+	 	# this triggers ai crib and upcard
+	 	print 'test?'
+
+
+	else:
+		# pegging needs to start or continue
+		print 'what?'
+
+	return game
+
+
+
+
+
+
 
 #g = newGame('John')
 #p = pickle.dumps(g)

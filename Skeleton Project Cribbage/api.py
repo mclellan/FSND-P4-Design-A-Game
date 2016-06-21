@@ -57,13 +57,14 @@ class CribbageApi(remote.Service):
         if not user:
             raise endpoints.NotFoundException(
                     'A User with that name does not exist!')
-        game = Game.new_game(user.key,user.name)
+        game = Game.new_game(user.key)
 
         # Use a task queue to update the average attempts remaining.
         # This operation is not needed to complete the creation of a new game
         # so it is performed out of sequence.
-        taskqueue.add(url='/tasks/cache_average_attempts')
-        return game.to_form('Good luck playing Cribbage!')
+        taskqueue.add(url='/tasks/cache_average_attempts')\
+
+        return game.to_form()
 
     @endpoints.method(request_message=GET_GAME_REQUEST,
                       response_message=GameForm,
@@ -74,11 +75,11 @@ class CribbageApi(remote.Service):
         """Return the current game state."""
         game = get_by_urlsafe(request.urlsafe_game_key, Game)
         if game:
-            #g = cribbage.depickleGame(game.pickle)
-            #return game.to_form(g.message)
-
-            return game.to_form('Time to make a move!')
-            
+            #msg = cribbage.resumeFromAnywhere(game, request)
+            game = cribbage.resumeFromAnywhere(game, request)
+            game.put()
+            #return game.to_form(str(msg))     
+            return game.to_form()
         else:
             raise endpoints.NotFoundException('Game not found!')
 
