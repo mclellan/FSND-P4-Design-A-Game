@@ -646,32 +646,64 @@ def resumeFromAnywhere(game, request):
 	#user_hand, ai_hand, crib, dealer, pegging, upcard
 	u = hand(str(game.user_hand))
 	a = hand(str(game.ai_hand))
-	c = hand(str(game.crib_hand))
+	cr = hand(str(game.crib_hand))
 	p = hand(str(game.pegging))
 	uc = hand(str(game.upcard))
 
-	# determine the dealer's name
-	if game.dealer:
-		deal = 'your'
-	else:
-		deal = "the AI's"
 
+	# Check that the user and ai's hands are empty
+	# then populate them and return the game and message
 	if len(u.cards) == 0 or u.cards == None:
-	 	# deal new hands
+	 	# create a 52 card deck and deal new hands of 6
  		d = deck()
 		d.shuffle()
 		d.deal_to_hand(u,6)	
 		d.deal_to_hand(a,6)
+
 		game.addHistory(str(u))
 		game.user_hand = str(u)
 		game.ai_hand = str(a)
+
+		# determine the dealer's name
+		if game.dealer:
+			deal = 'your'
+		else:
+			deal = "the AI's"
+
 		game.message = str('It is %s deal and crib. Select two cards from your hand to put in the crib. Your hand is: %s' % (deal, str(u)))
-		#game.put()
 		return game
-		#return ('It is %s deal and crib. Select two cards from your hand to put in the crib.\r\nYour hand is: %s' % (deal, str(u)))
+
+	# Check if the crib has been populated
+	# if not we check the request to see if it contains
+	# a two card selection
+	if len(cr.cards) < 2:
+		# validate request
+		if request.play is not None:
+			cards = str.split(var,',')
+			if len(cards) is not 2:
+				game.message = 'You must choose two cards to put in the crib. Format: AH,2H'
+				return game
+			else :
+				match = False
+				for c in cards:
+					for hand_card in u.cards:
+						if hand_card.short_name == c.strip():
+							u.move_to_crib(cr,hand_card)
+							match = True
+					if not match:
+						game.message = c + ': is not a valid play (not a card in your hand)'
+						return game
+
+				# select two cards from AI to pass
+				ai_picks = ''
+				for i in range(2):
+					random_card = random.choice(a.cards)
+					ai_picks += [random_card.short_name]
+					a.move_to_crib(cr,a.cards[i])
 
 
-	if len(c.cards) == 0:
+
+				#
 	 	# user action is to put cards in crib
 	 	# this triggers ai crib and upcard
 	 	print 'test?'

@@ -75,10 +75,8 @@ class CribbageApi(remote.Service):
         """Return the current game state."""
         game = get_by_urlsafe(request.urlsafe_game_key, Game)
         if game:
-            #msg = cribbage.resumeFromAnywhere(game, request)
             game = cribbage.resumeFromAnywhere(game, request)
             game.put()
-            #return game.to_form(str(msg))     
             return game.to_form()
         else:
             raise endpoints.NotFoundException('Game not found!')
