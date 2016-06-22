@@ -38,7 +38,6 @@ class cgame(object):
 				cgame.game_over = True
 		#print game.player1.name, game.player1.points, game.player2.name, game.player2.points
 
-
 class player(object):
 	""" contains information about the player """
 	def __init__(self,name,isHuman,points = 0):
@@ -169,7 +168,7 @@ class hand(deck):
 		cards = str.split(s,',')
 		for c in cards:
 			for hand_card in fullDeck.cards:
-				if hand_card.short_name == c:
+				if hand_card.short_name == c.strip():
 					fullDeck.move_to_crib(self,hand_card)
 
 class crib(deck):
@@ -220,8 +219,6 @@ def score(game,hand,upcard,isCrib):
 		game.player1.addPoints(total,game)
 	else:
 		game.player2.addPoints(total,game)"""
-	
-
 		
 def score_runs(values):
 	""" find runs and also count runs on duplicate values
@@ -399,7 +396,6 @@ def pegging(game,p,hand1,hand2):
 		if game.game_over:
 			break
 
-
 def pegCard(game,peg,card,player):
 	""" logic and scoring for pegging play """
 	print '%s plays: %s' % (player.name, card.short_name)
@@ -510,11 +506,6 @@ def pegCard(game,peg,card,player):
 
 	for s in score_message:
 		print '%s %s' % (player.name, s)
-
-
-
-	
-
 
 def getCount(p):
 	x = 0
@@ -652,72 +643,229 @@ def resumeFromAnywhere(game, request):
 
 
 	# Check that the user and ai's hands are empty
-	# then populate them and return the game and message
 	if len(u.cards) == 0 or u.cards == None:
-	 	# create a 52 card deck and deal new hands of 6
- 		d = deck()
-		d.shuffle()
-		d.deal_to_hand(u,6)	
-		d.deal_to_hand(a,6)
+		# deal the hands and return the game and message
+		return dealHands(game,u,a)
 
-		game.addHistory(str(u))
-		game.user_hand = str(u)
-		game.ai_hand = str(a)
-
-		# determine the dealer's name
-		if game.dealer:
-			deal = 'your'
-		else:
-			deal = "the AI's"
-
-		game.message = str('It is %s deal and crib. Select two cards from your hand to put in the crib. Your hand is: %s' % (deal, str(u)))
-		return game
-
-	# Check if the crib has been populated
+	# Check if the crib has been populated by two user cards
 	# if not we check the request to see if it contains
-	# a two card selection
-	if len(cr.cards) < 2:
+	# valid card selections
+	cards_to_play = 2 - len(cr.cards)
+	if cards_to_play > 0:
+		
 		# validate request
-		if request.play is not None:
-			cards = str.split(var,',')
-			if len(cards) is not 2:
-				game.message = 'You must choose two cards to put in the crib. Format: AH,2H'
-				return game
-			else :
-				match = False
-				for c in cards:
-					for hand_card in u.cards:
-						if hand_card.short_name == c.strip():
-							u.move_to_crib(cr,hand_card)
-							match = True
-					if not match:
-						game.message = c + ': is not a valid play (not a card in your hand)'
-						return game
+		if request is not None:
+			game = playToCrib(game,u,a,cr,uc,request,cards_to_play)
+			request = None
 
-				# select two cards from AI to pass
-				ai_picks = ''
-				for i in range(2):
-					random_card = random.choice(a.cards)
-					ai_picks += [random_card.short_name]
-					a.move_to_crib(cr,a.cards[i])
+	# pegging needs to start or continue
+	return pegging2(game,u,a,uc,p,request)
 
 
+def dealHands(game,u,a):
+ 	# create a 52 card deck and deal new hands of 6
+	d = deck()
+	d.shuffle()
+	d.deal_to_hand(u,6)	
+	d.deal_to_hand(a,6)
 
-				#
-	 	# user action is to put cards in crib
-	 	# this triggers ai crib and upcard
-	 	print 'test?'
+	game.addHistory(str(u))
+	game.user_hand = str(u)
+	game.ai_hand = str(a)
 
-
+	# determine the dealer's name
+	if game.dealer:
+		deal = 'your'
 	else:
-		# pegging needs to start or continue
-		print 'what?'
+		deal = "the AI's"
 
+	game.message = str('It is %s deal and crib. Select two cards from your hand to put in the crib. Your hand is: %s' % (deal, str(u)))
 	return game
 
+def playToCrib(game,u,a,cr,uc,request,cards_to_play):
+	cards = str.split(str(request.play),',')
+	if len(cards) is not cards_to_play:
+		game.message = 'Choose %s card(s) to put in the crib. Format: AH,2H' % cards_to_play
+		return game
+	else :
+		for c in cards:
+			match = False
+			# check player's hand for the cards entered
+			# in the request
+			for hand_card in u.cards:
+				if hand_card.short_name == c.strip():
+					u.move_to_crib(cr,hand_card)
+					match = True
+
+			if not match:
+				# the entered card isn't in the player's hand
+				# gracefully handle this and message to the user
+				game.message = c + ': is not a valid play (not a card in your hand). '
+				game.message += 'Choose %s card(s) to put in the crib. Format: AH,2H' % cards_to_play
+				return game
+
+		# select two cards from AI to pass
+		for i in range(2):
+			a.move_to_crib(cr,a.cards[i])
+
+		# select upcard
+		d = deck()
+		# remove cards already played
+		cards_to_remove = str.split(', '.join([str(u),str(a),str(cr)]),', ')
+		for deck_card in d.cards:
+			for s in cards_to_remove:
+				if deck_card.short_name == s:
+					d.remove_card(deck_card)
+		d.shuffle()
+		d.deal_to_hand(uc,1)
+		game.message = 'The upcard is ' + uc.cards[0].short_name
+
+		#score 2 points if the upcard is a Jack for the dealer
+		if uc.cards[0].name == 'Jack':
+			if game.dealer:
+				game.score(True,2)
+				game.message += 'You scored 2 points for turning up a Jack for the upcard.'
+			else:
+				game.score(False,2)
+				game.message += 'AI scored 2 points for turning up a Jack for the upcard.'
+
+		# Update game
+		game.crib_hand = str(cr)
+		game.ai_hand = str(a)
+		game.user_hand = str(u)
+		game.upcard = str(uc)
+
+		return game
+
+def pegging2(game,u,a,uc,p,request):
+
+	# remove from the hands the cards already played
+	hands = [u,a]
+	for h in hands:
+		for c in h.cards:
+			for pc in p.cards:
+				if c.short_name == pc.short_name:
+					a.remove_card(c)
+
+	# determine play
+	if request == None:
+		if game.dealer:
+			# pick random card for AI player
+			c = random.choice(a.cards)
+			pegCard2(game,p,c,False)
+			a.remove_card(c)
 
 
+def pegCard2(game,peg,card,player):
+	""" logic and scoring for pegging play """
+	print '%s plays: %s' % (player.name, card.short_name)
+	y = getCount(peg)
+	peg.add_card(card)
+	score_message = []
+	card_count = 0
+	x = getCount(peg)
 
+	"""
+	# get game player who is scoring
+	if game.player1 == player:
+		scorer = game.player1
+	else:
+		scorer = game.player2"""
+	
+	# Don't score a go/end
+	if card.name == 'go':
+		return
+
+	# determine number of played cards
+	for c in peg.cards:
+		if c.count_value != 0:
+			card_count += 1
+
+	# score 31s as 1 point since the go/lastcard
+	# is always counted
+	if x == 31:
+		#scorer.addPoints(2,game)
+		game.score(player,2)
+		score_message += ['scores 2 points for playing 31']
+	
+	elif card.short_name == 'new':
+		if y == 31:
+			return
+		# score go
+		#scorer.addPoints(1,game)
+		game.score(player,1)
+		score_message += ['scores 1 point for a go']
+	
+	elif card_count == 8 and x != 31:
+		# score last card
+		#scorer.addPoints(1,game)
+		game.score(player,1)
+		score_message += ['scores 1 point for playing the last card']
+
+	# score 15s
+	if x == 15:
+		#scorer.addPoints(2,game)
+		game.score(player,2)
+		score_message += ['scores 2 points for playing 15']
+
+	y = getCount(peg)
+	# score sets of cards 
+	setValues = []
+	for i in range(1,len(peg.cards)+1):
+		if y != 0:
+			if [peg.cards[-i].run_value] != 0:
+				setValues += [peg.cards[-i].run_value]
+				y -= peg.cards[-i].count_value
+
+	if len(setValues) > 1 and setValues[0] == setValues[1]:
+		# pair
+		if len(setValues) > 2 and setValues[2] == setValues[1]:
+			# triple
+			if len(setValues) > 3 and setValues[3] == setValues[2]:
+				# quadruple
+				#scorer.addPoints(12,game)
+				game.score(player,12)
+				score_message += ['scores 12 points for playing a quadruple']
+			else:
+				#scorer.addPoints(6,game)
+				game.score(player,6)
+				score_message += ['scores 6 points for playing a triple']
+		else:
+			#scorer.addPoints(2,game)
+			game.score(player,2)
+			score_message += ['scores 2 points for playing a pair']
+
+	# score runs
+	values = []
+	run_score = 0
+	for i in range(1,len(peg.cards)+1):
+		if x != 0:
+			if [peg.cards[-i].run_value] != 0:
+				values += [peg.cards[-i].run_value]
+				x -= peg.cards[-i].count_value
+			# print values, x
+			if len(values) > 2:
+				valueSort = copy.copy(values)
+				valueSort.sort()
+				last = -1
+				z = 1
+				for v in valueSort:
+					if v == last + 1:
+						z += 1
+					else:
+						z = 1
+					last = v
+					if z == len(valueSort):
+						print valueSort, values
+						run_score = z
+	if run_score > 0:
+		#scorer.addPoints(run_score,game)
+		game.score(player,run_score)
+		score_message += ['scores %s points for playing a run' % run_score]
+		#print run_score, 'RUN RUN RUN'
+
+	for s in score_message:
+		print '%s %s' % (player.name, s)
 
 
 

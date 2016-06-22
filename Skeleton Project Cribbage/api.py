@@ -75,7 +75,7 @@ class CribbageApi(remote.Service):
         """Return the current game state."""
         game = get_by_urlsafe(request.urlsafe_game_key, Game)
         if game:
-            game = cribbage.resumeFromAnywhere(game, request)
+            game = cribbage.resumeFromAnywhere(game, None)
             game.put()
             return game.to_form()
         else:
@@ -92,24 +92,10 @@ class CribbageApi(remote.Service):
         if game.game_over:
             return game.to_form('Game already over!')
 
-        # all the game logic 
-        """game.attempts_remaining -= 1
-        if request.guess == game.target:
-            game.end_game(True)
-            return game.to_form('You win!')
-
-        if request.guess < game.target:
-            msg = 'Too low!'
-        else:
-            msg = 'Too high!'
-
-        if game.attempts_remaining < 1:
-            game.end_game(False)
-            return game.to_form(msg + ' Game over!')
-        else:
-            game.put()
-            return game.to_form(msg)"""
-        return game.to_form('msg')
+        game = cribbage.resumeFromAnywhere(game, request)
+        game.put()
+        
+        return game.to_form()
 
     @endpoints.method(response_message=ScoreForms,
                       path='scores',
