@@ -137,6 +137,12 @@ class deck(object):
 			hand.add_card(self.play_card())
 
 	def move_to_crib(self, crib, card):
+		"""if card in self.cards:
+			self.cards.remove(card)
+		else:
+			for c in self.cards:
+				if card.short_name == c.short_name:
+					self.cards.remove(c)"""
 		self.cards.remove(card)
 		crib.add_card(card)
 
@@ -656,7 +662,9 @@ def resumeFromAnywhere(game, request):
 		# validate request
 		if request is not None:
 			game = playToCrib(game,u,a,cr,uc,request,cards_to_play)
-			request = None
+			cr = hand(str(game.crib_hand))
+			if len(cr.cards) == 4:
+				request = None
 
 	# pegging needs to start or continue
 	return pegging2(game,u,a,uc,p,request)
@@ -682,10 +690,11 @@ def dealHands(game,u,a):
 	game.message = str('It is %s deal and crib. Select two cards from your hand to put in the crib. Your hand is: %s' % (deal, str(u)))
 	return game
 
-def playToCrib(game,u,a,cr,uc,request,cards_to_play):
+def parseRequest(game,u,request,cards_to_play):
+	played = []
 	cards = str.split(str(request.play),',')
 	if len(cards) is not cards_to_play:
-		game.message = 'Choose %s card(s) to put in the crib. Format: AH,2H' % cards_to_play
+		game.message = 'Choose %s card(s). Format for multiple cards: AH,2H' % cards_to_play
 		return game
 	else :
 		for c in cards:
@@ -694,7 +703,7 @@ def playToCrib(game,u,a,cr,uc,request,cards_to_play):
 			# in the request
 			for hand_card in u.cards:
 				if hand_card.short_name == c.strip():
-					u.move_to_crib(cr,hand_card)
+					played += [hand_card]
 					match = True
 
 			if not match:
@@ -703,6 +712,19 @@ def playToCrib(game,u,a,cr,uc,request,cards_to_play):
 				game.message = c + ': is not a valid play (not a card in your hand). '
 				game.message += 'Choose %s card(s) to put in the crib. Format: AH,2H' % cards_to_play
 				return game
+	return played
+
+
+def playToCrib(game,u,a,cr,uc,request,cards_to_play):
+		temp_game = parseRequest(game,u,request,cards_to_play)
+		if type(temp_game) is Game:
+			return temp_game
+		else:
+			for hand_card in temp_game:
+				u.move_to_crib(cr,hand_card)
+
+		# add selection to game history
+		game.addHistory('You played %s into the crib.'% request.play)
 
 		# select two cards from AI to pass
 		for i in range(2):
@@ -718,7 +740,7 @@ def playToCrib(game,u,a,cr,uc,request,cards_to_play):
 					d.remove_card(deck_card)
 		d.shuffle()
 		d.deal_to_hand(uc,1)
-		game.message = 'The upcard is ' + uc.cards[0].short_name
+		game.message = 'The upcard is ' + uc.cards[0].short_name + '. '
 
 		#score 2 points if the upcard is a Jack for the dealer
 		if uc.cards[0].name == 'Jack':
@@ -752,13 +774,26 @@ def pegging2(game,u,a,uc,p,request):
 		if game.dealer:
 			# pick random card for AI player
 			c = random.choice(a.cards)
-			pegCard2(game,p,c,False)
-			a.remove_card(c)
+			p = pegCard2(game,p,c,False)
+			
+			game.pegging = str(p)
+		else: 
+			game.message += 'It is your turn to begin pegging. Choose a card from your hand.'
+	else:
+		temp_game = parseRequest(game,u,request,1)
+		if type(temp_game) is Game:
+			return temp_game
+		else:
+			p = pegCard2(game,p,temp_game[0],True)
+		
+
+	return game
 
 
 def pegCard2(game,peg,card,player):
 	""" logic and scoring for pegging play """
-	print '%s plays: %s' % (player.name, card.short_name)
+	name = game.user.get().name if player == True else 'AI'
+	game.addHistory('%s plays: %s' % (name, card.short_name))
 	y = getCount(peg)
 	peg.add_card(card)
 	score_message = []
@@ -774,7 +809,7 @@ def pegCard2(game,peg,card,player):
 	
 	# Don't score a go/end
 	if card.name == 'go':
-		return
+		return peg
 
 	# determine number of played cards
 	for c in peg.cards:
@@ -790,7 +825,7 @@ def pegCard2(game,peg,card,player):
 	
 	elif card.short_name == 'new':
 		if y == 31:
-			return
+			return peg
 		# score go
 		#scorer.addPoints(1,game)
 		game.score(player,1)
@@ -865,7 +900,10 @@ def pegCard2(game,peg,card,player):
 		#print run_score, 'RUN RUN RUN'
 
 	for s in score_message:
-		print '%s %s' % (player.name, s)
+		#print '%s %s' % (player.name, s)
+		game.addHistory('%s %s' % (name, s))
+
+	return peg
 
 
 

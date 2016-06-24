@@ -85,12 +85,12 @@ class Game(ndb.Model):
 
     def score(self,user,points):
         if user == True:
-            if user_points + points >= 121:
-                user_points = 121
+            if self.user_points + points >= 121:
+                self.user_points = 121
                 self.game_over = True
         else:
-            if ai_points + points >= 121:
-                ai_points = 121
+            if self.ai_points + points >= 121:
+                self.ai_points = 121
                 self.game_over = True
         self.put()
 
