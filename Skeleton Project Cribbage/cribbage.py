@@ -644,7 +644,6 @@ def resumeFromAnywhere(game, request):
 	u = hand(str(game.user_hand))
 	a = hand(str(game.ai_hand))
 	cr = hand(str(game.crib_hand))
-	p = hand(str(game.pegging))
 	uc = hand(str(game.upcard))
 
 
@@ -667,7 +666,7 @@ def resumeFromAnywhere(game, request):
 				request = None
 
 	# pegging needs to start or continue
-	return pegging2(game,u,a,uc,p,request)
+	return pegging2(game,u,a,uc,request)
 
 
 def dealHands(game,u,a):
@@ -759,7 +758,14 @@ def playToCrib(game,u,a,cr,uc,request,cards_to_play):
 
 		return game
 
-def pegging2(game,u,a,uc,p,request):
+def pegging2(game,u,a,uc,request):
+	# get pegging so far
+	p = hand(str(game.pegging))
+	count = getCount(p)
+
+	# cards to indicate a go or new set of play
+	goCard = card('go','go',0,0,'go')
+	newCard = card('new','new',0,0,'new')
 
 	# remove from the hands the cards already played
 	hands = [u,a]
@@ -769,22 +775,48 @@ def pegging2(game,u,a,uc,p,request):
 				if c.short_name == pc.short_name:
 					a.remove_card(c)
 
-	# determine play
-	if request == None:
+	if len(p.cards) == 0:
+		# pick random card for AI player if the first play
+		# goes to the AI, otherwise prompt user to play first
 		if game.dealer:
-			# pick random card for AI player
 			c = random.choice(a.cards)
-			p = pegCard2(game,p,c,False)
-			
-			game.pegging = str(p)
+			game = pegCard2(game,p,c,False)
 		else: 
 			game.message += 'It is your turn to begin pegging. Choose a card from your hand.'
+	
+	else if request == 'AIPLAY':
+		# AI play logic
+
+		# See if AI has a playable card
+		if canPlay(count,a):
+			# Select valid playable card
+			a.shuffle()
+			for c in a.cards:
+				if c.count_value <= 31-count:
+					game = pegCard2(game,p,c,False)
+					break
+			request = 'AIPLAYED'
+			return pegging2(game,u,a,uc,request)
+
+	else if request == 'AIPLAYED':
+		# Check to see the player has a valid response
+		if not canPlay(count,u):
+			game = pegCard2(game,p,go,True)
+		
 	else:
+		# User has submitted a play
 		temp_game = parseRequest(game,u,request,1)
 		if type(temp_game) is Game:
+			# Card selected was invalid (not a card
+			# the user holds or wrong quantity)
 			return temp_game
 		else:
-			p = pegCard2(game,p,temp_game[0],True)
+			# Card selected exists
+			game = pegCard2(game,p,temp_game[0],True)
+
+			# Check to see if AI can play
+			request = 'AIPLAY'
+			return pegging2(game,u,a,uc,request)
 		
 
 	return game
@@ -792,8 +824,17 @@ def pegging2(game,u,a,uc,p,request):
 
 def pegCard2(game,peg,card,player):
 	""" logic and scoring for pegging play """
+
+	# See if card attempt can be played (count under 31)
+	count = getCount(p)
+	if c.count_value > 31-count:
+		game.message = 'Card cannot be played, the count is too high. Current count: ', count
+		return game
+
 	name = game.user.get().name if player == True else 'AI'
 	game.addHistory('%s plays: %s' % (name, card.short_name))
+	game.message += '%s plays: %s' % (name, card.short_name)
+
 	y = getCount(peg)
 	peg.add_card(card)
 	score_message = []
@@ -903,7 +944,9 @@ def pegCard2(game,peg,card,player):
 		#print '%s %s' % (player.name, s)
 		game.addHistory('%s %s' % (name, s))
 
-	return peg
+	game.pegging = str(peg)
+
+	return game
 
 
 
