@@ -640,12 +640,15 @@ def playHand(game, dealBool):
 # determine the state of the game and then resume play in the next
 # game step
 def resumeFromAnywhere(game, request):
+	# clear the game messaging
+	game.message = ''
+
 	#user_hand, ai_hand, crib, dealer, pegging, upcard
 	u = hand(str(game.user_hand))
 	a = hand(str(game.ai_hand))
 	cr = hand(str(game.crib_hand))
 	uc = hand(str(game.upcard))
-
+	goToPegging = True
 
 	# Check that the user and ai's hands are empty
 	if len(u.cards) == 0 or u.cards == None:
@@ -657,16 +660,21 @@ def resumeFromAnywhere(game, request):
 	# valid card selections
 	cards_to_play = 2 - len(cr.cards)
 	if cards_to_play > 0:
-		
+		goToPegging = False
+
 		# validate request
 		if request is not None:
 			game = playToCrib(game,u,a,cr,uc,request,cards_to_play)
 			cr = hand(str(game.crib_hand))
 			if len(cr.cards) == 4:
+				goToPegging = True
 				request = None
-
-	# pegging needs to start or continue
-	return pegging2(game,u,a,uc,request)
+	
+	if goToPegging:
+		# pegging needs to start or continue
+		return pegging2(game,u,a,uc,request)
+	else:
+		return game
 
 
 def dealHands(game,u,a):
@@ -709,10 +717,14 @@ def parseRequest(game,u,request,cards_to_play):
 				# the entered card isn't in the player's hand
 				# gracefully handle this and message to the user
 				game.message = c + ': is not a valid play (not a card in your hand). '
-				game.message += 'Choose %s card(s) to put in the crib. Format: AH,2H' % cards_to_play
+				game.message += 'Choose %s card(s) to ' % cards_to_play
+				if len(u.cards) > 4:
+					game.message += 'put in the crib. Format: AH,2H'
+				else:
+					game.message += 'play.'
+				game.message += ' Cards in your hand: ' + str(u)
 				return game
 	return played
-
 
 def playToCrib(game,u,a,cr,uc,request,cards_to_play):
 		temp_game = parseRequest(game,u,request,cards_to_play)
@@ -758,6 +770,14 @@ def playToCrib(game,u,a,cr,uc,request,cards_to_play):
 
 		return game
 
+def handsMinusPegging(h,p):
+	# remove from the hands the cards already played
+	for c in h.cards:
+		for pc in p.cards:
+			if c.short_name == pc.short_name:
+				h.remove_card(c)
+	return h
+
 def pegging2(game,u,a,uc,request):
 	# get pegging so far
 	p = hand(str(game.pegging))
@@ -767,24 +787,20 @@ def pegging2(game,u,a,uc,request):
 	goCard = card('go','go',0,0,'go')
 	newCard = card('new','new',0,0,'new')
 
-	# remove from the hands the cards already played
-	hands = [u,a]
-	for h in hands:
-		for c in h.cards:
-			for pc in p.cards:
-				if c.short_name == pc.short_name:
-					a.remove_card(c)
+	# update playable cards 
+	u = handsMinusPegging(u,p)
+	a = handsMinusPegging(a,p)
 
-	if len(p.cards) == 0:
+	if len(p.cards) == 0 and request == None:
 		# pick random card for AI player if the first play
 		# goes to the AI, otherwise prompt user to play first
 		if game.dealer:
 			c = random.choice(a.cards)
 			game = pegCard2(game,p,c,False)
 		else: 
-			game.message += 'It is your turn to begin pegging. Choose a card from your hand.'
+			game.message += 'It is your turn to begin pegging. Choose a card from your hand. '
 	
-	else if request == 'AIPLAY':
+	elif request == 'AIPLAY' or request == 'AIPLAYGO':
 		# AI play logic
 
 		# See if AI has a playable card
@@ -796,29 +812,57 @@ def pegging2(game,u,a,uc,request):
 					game = pegCard2(game,p,c,False)
 					break
 			request = 'AIPLAYED'
-			return pegging2(game,u,a,uc,request)
+			game = pegging2(game,u,a,uc,request)
 
-	else if request == 'AIPLAYED':
+		elif request == 'AIPLAY':
+			# AI can't play so gives go
+			game = pegCard2(game,p,goCard,False)
+			game.message += 'The AI has no moves and gives you a go. '
+			u = handsMinusPegging(u,hand(game.pegging))
+			if not canPlay(count, u):
+				game = pegCard2(game,p,newCard,True)
+				game.message += 'You have no plays, the AI will start a new round of pegging. '
+				request = 'AIPLAY'
+				game = pegging2(game,u,a,uc,request)
+
+		elif request == 'AIPLAYGO':
+			# Can't play but the go was given
+			# score end of hand
+			game = pegCard2(game,p,newCard,False)
+			game.message += 'Your turn to start a new round of pegging. Please play a card. '
+			return game
+
+	elif request == 'AIPLAYED':
 		# Check to see the player has a valid response
 		if not canPlay(count,u):
-			game = pegCard2(game,p,go,True)
+			game = pegCard2(game,p,goCard,True)
+			request = 'AIPLAYGO'
+			game = pegging2(game,u,a,uc,request)
 		
 	else:
 		# User has submitted a play
-		temp_game = parseRequest(game,u,request,1)
-		if type(temp_game) is Game:
-			# Card selected was invalid (not a card
-			# the user holds or wrong quantity)
-			return temp_game
-		else:
-			# Card selected exists
-			game = pegCard2(game,p,temp_game[0],True)
+		if request != None:
+			temp_game = parseRequest(game,u,request,1)
+			if type(temp_game) is not Game:
+				# Card selected exists
+				game = pegCard2(game,p,temp_game[0],True)
 
-			# Check to see if AI can play
-			request = 'AIPLAY'
-			return pegging2(game,u,a,uc,request)
+				# Check to see if AI can play
+				request = 'AIPLAY'
+				game = pegging2(game,u,a,uc,request)
+
+	# update values to provide better messaging
+	p = hand(str(game.pegging))
+	count = getCount(p)
+	u = handsMinusPegging(u,p)
+	a = handsMinusPegging(a,p)
+
+
+	if len(u.cards) > 0 and 'in your hand' not in game.message:
+		game.message += 'Cards remaining in your hand: ' + str(u) + ' '
+	if len(u.cards) > 0 and 'The count is' not in game.message:
+		game.message += ' The count is: ' + str(getCount(p))
 		
-
 	return game
 
 
@@ -826,31 +870,25 @@ def pegCard2(game,peg,card,player):
 	""" logic and scoring for pegging play """
 
 	# See if card attempt can be played (count under 31)
-	count = getCount(p)
-	if c.count_value > 31-count:
-		game.message = 'Card cannot be played, the count is too high. Current count: ', count
+	count = getCount(peg)
+	if card.count_value > 31-count:
+		game.message = 'Card cannot be played, the count is too high. Current count: ' + str(count)
 		return game
 
 	name = game.user.get().name if player == True else 'AI'
-	game.addHistory('%s plays: %s' % (name, card.short_name))
-	game.message += '%s plays: %s' % (name, card.short_name)
+	game.addHistory('%s plays: %s. ' % (name, card.short_name))
+	game.message += '%s plays: %s. ' % (name, card.short_name)
 
 	y = getCount(peg)
 	peg.add_card(card)
 	score_message = []
 	card_count = 0
 	x = getCount(peg)
-
-	"""
-	# get game player who is scoring
-	if game.player1 == player:
-		scorer = game.player1
-	else:
-		scorer = game.player2"""
 	
 	# Don't score a go/end
 	if card.name == 'go':
-		return peg
+		game.pegging = str(peg)
+		return game
 
 	# determine number of played cards
 	for c in peg.cards:
@@ -866,7 +904,8 @@ def pegCard2(game,peg,card,player):
 	
 	elif card.short_name == 'new':
 		if y == 31:
-			return peg
+			game.pegging = str(peg)
+			return game
 		# score go
 		#scorer.addPoints(1,game)
 		game.score(player,1)
@@ -942,7 +981,8 @@ def pegCard2(game,peg,card,player):
 
 	for s in score_message:
 		#print '%s %s' % (player.name, s)
-		game.addHistory('%s %s' % (name, s))
+		game.addHistory('%s %s ' % (name, s))
+		game.message += '%s %s ' % (name, s)
 
 	game.pegging = str(peg)
 
