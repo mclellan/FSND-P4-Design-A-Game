@@ -782,6 +782,13 @@ def pegging2(game,u,a,uc,request):
 	# get pegging so far
 	p = hand(str(game.pegging))
 	count = getCount(p)
+	# determine number of played cards
+	for c in p.cards:
+		if c.count_value != 0:
+			card_count += 1
+
+	if card_count == 8:
+		return scoreHand(game)
 
 	# cards to indicate a go or new set of play
 	goCard = card('go','go',0,0,'go')
@@ -798,7 +805,7 @@ def pegging2(game,u,a,uc,request):
 			c = random.choice(a.cards)
 			game = pegCard2(game,p,c,False)
 		else: 
-			game.message += 'It is your turn to begin pegging. Choose a card from your hand. '
+			game.message += 'It is your turn to begin pegging. '
 	
 	elif request == 'AIPLAY' or request == 'AIPLAYGO':
 		# AI play logic
@@ -812,18 +819,24 @@ def pegging2(game,u,a,uc,request):
 					game = pegCard2(game,p,c,False)
 					break
 			request = 'AIPLAYED'
-			game = pegging2(game,u,a,uc,request)
+			return pegging2(game,u,a,uc,request)
 
 		elif request == 'AIPLAY':
 			# AI can't play so gives go
 			game = pegCard2(game,p,goCard,False)
 			game.message += 'The AI has no moves and gives you a go. '
 			u = handsMinusPegging(u,hand(game.pegging))
+
+			# Check if user can play on that go
 			if not canPlay(count, u):
+				# If not the user scores the go
+				# and pegging returns to AI for new round
 				game = pegCard2(game,p,newCard,True)
 				game.message += 'You have no plays, the AI will start a new round of pegging. '
 				request = 'AIPLAY'
-				game = pegging2(game,u,a,uc,request)
+				return pegging2(game,u,a,uc,request)
+			else:
+				return game
 
 		elif request == 'AIPLAYGO':
 			# Can't play but the go was given
@@ -860,7 +873,7 @@ def pegging2(game,u,a,uc,request):
 
 	if len(u.cards) > 0 and 'in your hand' not in game.message:
 		game.message += 'Cards remaining in your hand: ' + str(u) + ' '
-	if len(u.cards) > 0 and 'The count is' not in game.message:
+	#if len(u.cards) > 0 and 'The count is' not in game.message:
 		game.message += ' The count is: ' + str(getCount(p))
 		
 	return game
@@ -895,10 +908,7 @@ def pegCard2(game,peg,card,player):
 		if c.count_value != 0:
 			card_count += 1
 
-	# score 31s as 1 point since the go/lastcard
-	# is always counted
 	if x == 31:
-		#scorer.addPoints(2,game)
 		game.score(player,2)
 		score_message += ['scores 2 points for playing 31']
 	
@@ -906,14 +916,13 @@ def pegCard2(game,peg,card,player):
 		if y == 31:
 			game.pegging = str(peg)
 			return game
+		
 		# score go
-		#scorer.addPoints(1,game)
 		game.score(player,1)
 		score_message += ['scores 1 point for a go']
 	
 	elif card_count == 8 and x != 31:
 		# score last card
-		#scorer.addPoints(1,game)
 		game.score(player,1)
 		score_message += ['scores 1 point for playing the last card']
 
