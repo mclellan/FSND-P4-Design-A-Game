@@ -644,8 +644,6 @@ def playHand(game, dealBool):
 # determine the state of the game and then resume play in the next
 # game step
 def resumeFromAnywhere(game, request):
-	# clear the game messaging
-	game.message = ''
 
 	#user_hand, ai_hand, crib, dealer, pegging, upcard
 	u = hand(str(game.user_hand))
@@ -668,16 +666,20 @@ def resumeFromAnywhere(game, request):
 
 		# validate request
 		if request is not None:
+			# clear the game messaging
+			game.message = ''
+
+			# try to play the cards in the request
 			game = playToCrib(game,u,a,cr,uc,request,cards_to_play)
 			cr = hand(str(game.crib_hand))
 			if len(cr.cards) == 4:
 				goToPegging = True
 				request = None
 	
-	if goToPegging:
+	if goToPegging and not game.game_over:
 		# pegging needs to start or continue
 		game = pegging2(game,u,a,uc,request)
-
+		
 		# determine number of played cards
 		card_count = 0
 		p = hand(str(game.pegging))
@@ -687,10 +689,17 @@ def resumeFromAnywhere(game, request):
 
 		if card_count == 8:
 			# Score the hands and crib
-			game = scoreHand(game,game.user_hand,True,False)
-			game = scoreHand(game,game.ai_hand,False,False)
-			game = scoreHand(game,game.crib_hand,game.dealer,True)
-			
+			if game.dealer:
+				# if dealer --> ai, user, crib(user)
+				game = scoreHand(game,game.ai_hand,False,False) if game.game_over is False else game
+				game = scoreHand(game,game.user_hand,True,False) if game.game_over is False else game
+			else:
+				# if not dealer --> user, ai, crib(ai)
+				game = scoreHand(game,game.user_hand,True,False) if game.game_over is False else game
+				game = scoreHand(game,game.ai_hand,False,False) if game.game_over is False else game
+
+			game = scoreHand(game,game.crib_hand,game.dealer,True) if game.game_over is False else game
+						
 			# change dealer and reset hands
 			game.dealer = not game.dealer
 			game.user_hand = ''
@@ -700,8 +709,7 @@ def resumeFromAnywhere(game, request):
 			game.crib_hand = ''
 
 			# deal new hands
-			game = dealHands(game,hand(''),hand(''))
-
+			game = dealHands(game,hand(''),hand('')) if game.game_over is False else game
 
 	return game
 
@@ -753,6 +761,8 @@ def parseRequest(game,u,request,cards_to_play):
 					game.message += 'play.'
 				game.message += ' Cards in your hand: ' + str(u)
 				return game
+		if len(played) == 0:
+			game.message = 'Choose %s card(s). Format for multiple cards: AH,2H' % cards_to_play
 	return played
 
 def playToCrib(game,u,a,cr,uc,request,cards_to_play):
@@ -785,11 +795,11 @@ def playToCrib(game,u,a,cr,uc,request,cards_to_play):
 		#score 2 points if the upcard is a Jack for the dealer
 		if uc.cards[0].name == 'Jack':
 			if game.dealer:
-				game.score(True,2)
 				game.message += 'You scored 2 points for turning up a Jack for the upcard.'
+				game.score(True,2)
 			else:
-				game.score(False,2)
 				game.message += 'AI scored 2 points for turning up a Jack for the upcard.'
+				game.score(False,2)
 
 		# Update game
 		game.crib_hand = str(cr)
@@ -808,6 +818,10 @@ def handsMinusPegging(h,p):
 	return h
 
 def pegging2(game,u,a,uc,request):
+	# return if previous play ended game
+	if game.game_over:
+		return game
+
 	# get pegging so far
 	p = hand(str(game.pegging))
 	count = getCount(p)
@@ -896,17 +910,25 @@ def pegging2(game,u,a,uc,request):
 				request = 'AIPLAY'
 				game = pegging2(game,u,a,uc,request)
 
-	# update values to provide better messaging
-	p = hand(str(game.pegging))
-	count = getCount(p)
-	u = handsMinusPegging(u,p)
-	a = handsMinusPegging(a,p)
+	if not game.game_over:
+		# update values to provide better messaging
+		p = hand(str(game.pegging))
+		count = getCount(p)
+		u = handsMinusPegging(u,p)
+		a = handsMinusPegging(a,p)
 
-	if len(u.cards) > 0 and 'in your hand' not in game.message:
-		game.message += 'Cards remaining in your hand: ' + str(u) + '\r\n'
-	if len(u.cards) > 0 and 'The count is' not in game.message:
-		game.message += ' The count is: ' + str(getCount(p))
-		
+		if len(u.cards) > 0 and 'in your hand' not in game.message:
+			game.message += 'Cards remaining in your hand: ' + str(u) + '\r\n'
+		if len(u.cards) > 0 and 'The count is' not in game.message:
+			game.message += ' The count is: ' + str(getCount(p))
+			
+	return game
+
+def pegScore(game,points,player,message):
+	if not game.game_over:
+		game.message += message
+		game.addHistory(message)
+		game.score(player,points)
 	return game
 
 def pegCard2(game,peg,card,player):
@@ -939,8 +961,7 @@ def pegCard2(game,peg,card,player):
 			card_count += 1
 
 	if x == 31:
-		game.score(player,2)
-		score_message += ['scores 2 points for playing 31']
+		game = pegScore(game,2,player,'%s scores 2 points for playing 31' % name)
 	
 	elif card.short_name == 'new':
 		# The last play was 31 so don't score
@@ -949,19 +970,17 @@ def pegCard2(game,peg,card,player):
 			return game
 		else:
 			# score go
-			game.score(player,1)
-			score_message += ['scores 1 point for a go']
+			game = pegScore(game,1,player,'%s scores 1 point for a go' % name)
 	
+	# score last card
 	elif card_count == 8:
-		# score last card
-		game.score(player,1)
-		score_message += ['scores 1 point for playing the last card']
+		
+		game = pegScore(game,1,player,'%s scores 1 point for playing the last card' % name)
 
 	# score 15s
 	if x == 15:
-		#scorer.addPoints(2,game)
-		game.score(player,2)
-		score_message += ['scores 2 points for playing 15']
+		game = pegScore(game,2,player,'%s scores 2 points for playing 15' % name)
+
 
 	y = getCount(peg)
 	# score sets of cards 
@@ -978,17 +997,11 @@ def pegCard2(game,peg,card,player):
 			# triple
 			if len(setValues) > 3 and setValues[3] == setValues[2]:
 				# quadruple
-				#scorer.addPoints(12,game)
-				game.score(player,12)
-				score_message += ['scores 12 points for playing a quadruple']
+				game = pegScore(game,12,player,'%s scores 12 points for playing a quadruple' % name)
 			else:
-				#scorer.addPoints(6,game)
-				game.score(player,6)
-				score_message += ['scores 6 points for playing a triple']
+				game = pegScore(game,6,player,'%s scores 6 points for playing a triple' % name)
 		else:
-			#scorer.addPoints(2,game)
-			game.score(player,2)
-			score_message += ['scores 2 points for playing a pair']
+			game = pegScore(game,2,player,'%s scores 2 points for playing a pair' % name)
 
 	# score runs
 	values = []
@@ -1019,15 +1032,7 @@ def pegCard2(game,peg,card,player):
 						#print valueSort, values
 						run_score = z
 	if run_score > 0:
-		#scorer.addPoints(run_score,game)
-		game.score(player,run_score)
-		score_message += ['scores %s points for playing a run' % run_score]
-		#print run_score, 'RUN RUN RUN'
-
-	for s in score_message:
-		#print '%s %s' % (player.name, s)
-		game.addHistory('%s %s ' % (name, s))
-		game.message += '%s %s ' % (name, s)
+		game = pegScore(game,run_score,player,'%s scores %s points for playing a pair' % (name,run_score))
 
 	game.pegging = str(peg)
 

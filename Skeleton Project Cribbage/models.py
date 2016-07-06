@@ -88,12 +88,14 @@ class Game(ndb.Model):
             if self.user_points + points >= 121:
                 self.user_points = 121
                 self.game_over = True
+                self.message += "You have won the game!"
             else:
                 self.user_points += points
         else:
             if self.ai_points + points >= 121:
                 self.ai_points = 121
                 self.game_over = True
+                self.message += "The AI wins the game!"
             else:
                 self.ai_points += points
         self.put()
