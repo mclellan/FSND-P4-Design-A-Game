@@ -994,24 +994,29 @@ def pegCard2(game,peg,card,player):
 	values = []
 	run_score = 0
 	for i in range(1,len(peg.cards)+1):
+		# iterate through all the cards pegged
 		if x != 0:
-			if [peg.cards[-i].run_value] != 0:
+			# check that we are on the most recent run
+			# by counting down cards to 0 (initial peg value)
+			if peg.cards[-i].run_value != 0:
+				# ignore plays of 'go'
+				# add the card to the set of values
 				values += [peg.cards[-i].run_value]
 				x -= peg.cards[-i].count_value
-			# print values, x
+
 			if len(values) > 2:
-				valueSort = copy.copy(values)
-				valueSort.sort()
+				# runs are of minimum length 3
+				values.sort()
 				last = -1
 				z = 1
-				for v in valueSort:
+				for v in values:
 					if v == last + 1:
 						z += 1
 					else:
 						z = 1
 					last = v
-					if z == len(valueSort):
-						print valueSort, values
+					if z == len(values):
+						#print valueSort, values
 						run_score = z
 	if run_score > 0:
 		#scorer.addPoints(run_score,game)
