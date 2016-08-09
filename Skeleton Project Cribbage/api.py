@@ -10,21 +10,25 @@ import endpoints
 from protorpc import remote, messages
 from google.appengine.api import memcache
 from google.appengine.api import taskqueue
+from google.appengine.ext import ndb
 
 from models import User, Game, Score
 from models import StringMessage, NewGameForm, GameForm, MakeMoveForm,\
-    ScoreForms
+    ScoreForms, GameForms
 from utils import get_by_urlsafe
 import cribbage
 
 NEW_GAME_REQUEST = endpoints.ResourceContainer(NewGameForm)
 GET_GAME_REQUEST = endpoints.ResourceContainer(
         urlsafe_game_key=messages.StringField(1),)
+CANCEL_GAME_REQUEST = endpoints.ResourceContainer(
+        urlsafe_game_key=messages.StringField(1),)
 MAKE_MOVE_REQUEST = endpoints.ResourceContainer(
     MakeMoveForm,
     urlsafe_game_key=messages.StringField(1),)
 USER_REQUEST = endpoints.ResourceContainer(user_name=messages.StringField(1),
                                            email=messages.StringField(2))
+GET_USER_GAMES = endpoints.ResourceContainer(user_name=messages.StringField(1))
 
 MEMCACHE_MOVES_REMAINING = 'MOVES_REMAINING'
 
@@ -66,7 +70,26 @@ class CribbageApi(remote.Service):
 
         return game.to_form()
 
-    @endpoints.method(request_message=GET_GAME_REQUEST,
+    @endpoints.method(request_message=CANCEL_GAME_REQUEST,
+                      response_message=StringMessage,
+                      path='game/cancel/{urlsafe_game_key}',
+                      name='cancel_game',
+                      http_method='GET')
+    def cancel_game(self, request):
+        """Cancel the requested game."""
+        game = get_by_urlsafe(request.urlsafe_game_key, Game)
+        if game:
+            if not game.game_over:
+                game_key = ndb.Key(urlsafe=request.urlsafe_game_key)
+                game_key.delete() 
+                return StringMessage(message='Game {} cancelled!'.format(
+                    request.urlsafe_game_key))
+            else:
+                raise endpoints.NotFoundException('Completed games cannot be cancelled.')
+        else:
+            raise endpoints.NotFoundException('Game not found!')
+
+    @endpoints.method(request_message=CANCEL_GAME_REQUEST,
                       response_message=GameForm,
                       path='game/{urlsafe_game_key}',
                       name='get_game',
@@ -96,6 +119,19 @@ class CribbageApi(remote.Service):
         game.put()
         
         return game.to_form()
+
+    @endpoints.method(request_message=GET_USER_GAMES,
+                      response_message=GameForms,
+                      path='game/user/{user_name}',
+                      name='get_games',
+                      http_method='GET')
+    def get_games(self, request):
+        """Returns all a user's games."""
+        user = User.query(User.name == request.user_name).get()
+        if not user:
+            raise endpoints.NotFoundException(
+                    'A User with that name does not exist!')
+        return GameForms(items=[game.to_form() for game in Game.query(Game.game_over==False,ancestor=user.key)])
 
     @endpoints.method(response_message=ScoreForms,
                       path='scores',

@@ -44,7 +44,9 @@ class Game(ndb.Model):
                     pegging = '',
                     dealer = random.choice([True,False]),
                     upcard= '',
-                    message='Good luck playing Cribbage!')
+                    message='Good luck playing Cribbage!',
+                    parent=user)
+
         game.put()
         return game
 
@@ -100,6 +102,12 @@ class Game(ndb.Model):
                 self.ai_points += points
         self.put()
 
+        if self.game_over:
+            # Add the game to the score 'board'
+            score = Score(user=self.user, date=date.today(), won=user,
+                          user_points=self.user_points, ai_points=self.ai_points)
+            score.put()
+
     #def game_history(self)
     #    form = GameForm()
 
@@ -110,10 +118,11 @@ class Score(ndb.Model):
     date = ndb.DateProperty(required=True)
     won = ndb.BooleanProperty(required=True)
     user_points = ndb.IntegerProperty(required=True)
+    ai_points = ndb.IntegerProperty(required=True)
 
     def to_form(self):
         return ScoreForm(user_name=self.user.get().name, won=self.won,
-                         date=str(self.date), points=self.user_points)
+                         date=str(self.date), user_points=self.user_points,ai_points=self.ai_points)
 
 
 class GameForm(messages.Message):
@@ -127,6 +136,10 @@ class GameForm(messages.Message):
     pegging = messages.StringField(7, required=True)
     upcard = messages.StringField(8, required=True)
     user_hand = messages.StringField(9, required=True)
+
+class GameForms(messages.Message):
+    """Return multiple GameForms"""
+    items = messages.MessageField(GameForm, 1, repeated=True)
 
 
 class NewGameForm(messages.Message):
@@ -145,6 +158,7 @@ class ScoreForm(messages.Message):
     date = messages.StringField(2, required=True)
     won = messages.BooleanField(3, required=True)
     user_points = messages.IntegerField(4, required=True)
+    ai_points = messages.IntegerField(5, required=True)
 
 
 class ScoreForms(messages.Message):
